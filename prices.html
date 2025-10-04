@@ -317,12 +317,14 @@
         let chart;
         let currentData = [...pricesData];
         let filteredData = [...pricesData];
+        let eventsData = {};
         let isSelecting = false;
         let selectionStart = null;
 
         // Load CSV data
         async function loadCSVData() {
             try {
+                // Load price data
                 const response = await fetch('./data/prices_sanitized.csv');
                 const csvText = await response.text();
                 const lines = csvText.split('\n');
@@ -350,6 +352,16 @@
                 
                 currentData = data;
                 filteredData = [...data];
+
+                // Load events data
+                try {
+                    const eventsResponse = await fetch('./data/events_all.json');
+                    eventsData = await eventsResponse.json();
+                } catch (eventsError) {
+                    console.error('Error loading events:', eventsError);
+                    eventsData = {};
+                }
+
                 setDateRange();
                 updateStats();
                 updateChart();
@@ -433,21 +445,69 @@
             const chartContainer = document.getElementById('chartContainer');
             const canvas = document.getElementById('priceChart');
             
-            // Get chart area bounds
-            const rect = canvas.getBoundingClientRect();
-            const containerRect = chartContainer.getBoundingClientRect();
-            
             // Calculate relative positions within the chart container
-            const relativeX = x - 20; // Account for padding
-            const relativeY = 20; // Start from top of chart area
+            // x and y are already relative to the canvas, we need to account for canvas position within container
+            const canvasRect = canvas.getBoundingClientRect();
+            const containerRect = chartContainer.getBoundingClientRect();
+
+            const canvasOffsetX = canvasRect.left - containerRect.left;
+            const canvasOffsetY = canvasRect.top - containerRect.top;
+
+            const relativeX = x + canvasOffsetX;
+            const relativeY = canvasOffsetY; // Start from top of canvas within container
             const relativeWidth = width;
-            const relativeHeight = 500 - 40; // Full height minus padding
-            
+            const relativeHeight = canvasRect.height; // Full canvas height
+
             overlay.style.left = relativeX + 'px';
             overlay.style.top = relativeY + 'px';
             overlay.style.width = relativeWidth + 'px';
             overlay.style.height = relativeHeight + 'px';
             overlay.style.display = 'block';
+        }
+
+        // Get filtered events based on current date range
+        function getFilteredEvents() {
+            if (!eventsData || Object.keys(eventsData).length === 0) {
+                return [];
+            }
+
+            const startDate = filteredData.length > 0 ? filteredData[0].fecha : null;
+            const endDate = filteredData.length > 0 ? filteredData[filteredData.length - 1].fecha : null;
+
+            if (!startDate || !endDate) {
+                return [];
+            }
+
+            const events = [];
+            for (const [date, eventName] of Object.entries(eventsData)) {
+                // Fix invalid dates like "2018-15-10" by parsing them properly
+                let validDate = date;
+                const dateParts = date.split('-');
+                if (dateParts.length === 3) {
+                    const year = dateParts[0];
+                    const month = dateParts[1];
+                    const day = dateParts[2];
+
+                    // Check for invalid day/month combinations and try to fix them
+                    if (parseInt(month) > 12) {
+                        // Swap month and day if month > 12
+                        validDate = `${year}-${day.padStart(2, '0')}-${month.padStart(2, '0')}`;
+                    } else if (parseInt(day) > 31) {
+                        // Skip invalid dates
+                        continue;
+                    }
+                }
+
+                if (validDate >= startDate && validDate <= endDate) {
+                    events.push({
+                        x: validDate,
+                        y: 0,
+                        eventName: eventName
+                    });
+                }
+            }
+
+            return events;
         }
 
         // Update statistics
@@ -511,7 +571,8 @@
                     borderColor: colors.maiz.border,
                     backgroundColor: colors.maiz.background,
                     tension: 0.1,
-                    fill: false
+                    fill: false,
+                    type: 'line'
                 });
             }
 
@@ -522,7 +583,8 @@
                     borderColor: colors.trigo.border,
                     backgroundColor: colors.trigo.background,
                     tension: 0.1,
-                    fill: false
+                    fill: false,
+                    type: 'line'
                 });
             }
 
@@ -533,35 +595,51 @@
                     borderColor: colors.soja.border,
                     backgroundColor: colors.soja.background,
                     tension: 0.1,
-                    fill: false
+                    fill: false,
+                    type: 'line'
+                });
+            }
+
+            // Add events as scatter points
+            const events = getFilteredEvents();
+            if (events.length > 0) {
+                datasets.push({
+                    label: 'Eventos',
+                    data: events,
+                    backgroundColor: '#FF4444',
+                    borderColor: '#CC0000',
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
+                    showLine: false,
+                    type: 'scatter'
                 });
             }
 
             chart = new Chart(ctx, {
                 type: 'line',
                 data: { 
-                    labels: filteredData.map(row => row.fecha),
-                    datasets: datasets.map(dataset => ({
-                        ...dataset,
-                        data: dataset.data.map(point => point.y)
-                    }))
+                    datasets: datasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
                         x: {
+                            type: 'time',
+                            time: {
+                                parser: 'yyyy-MM-dd',
+                                tooltipFormat: 'yyyy-MM-dd',
+                                displayFormats: {
+                                    day: 'MMM dd',
+                                    month: 'MMM yyyy'
+                                }
+                            },
                             title: {
                                 display: true,
                                 text: 'Fecha'
                             },
                             ticks: {
-                                maxTicksLimit: 10,
-                                callback: function(value, index, values) {
-                                    // Show every nth label to avoid overcrowding
-                                    const step = Math.ceil(values.length / 10);
-                                    return index % step === 0 ? this.getLabelForValue(value) : '';
-                                }
+                                maxTicksLimit: 10
                             }
                         },
                         y: {
@@ -569,13 +647,13 @@
                                 display: true,
                                 text: 'Precio (USD)'
                             },
-                            beginAtZero: false
+                            beginAtZero: true
                         }
                     },
                     plugins: {
                         title: {
                             display: true,
-                            text: 'Evolución de Precios de Cereales (USD)',
+                            text: 'Evolución de Precios de Cereales (USD) con Eventos',
                             font: {
                                 size: 18
                             }
@@ -585,13 +663,19 @@
                             position: 'top'
                         },
                         tooltip: {
-                            mode: 'index',
+                            mode: 'nearest',
                             intersect: false,
                             callbacks: {
                                 label: function(context) {
+                                    if (context.dataset.label === 'Eventos') {
+                                        return `Evento: ${context.raw.eventName}`;
+                                    }
                                     return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
                                 },
                                 title: function(context) {
+                                    if (context[0].dataset.label === 'Eventos') {
+                                        return 'Fecha: ' + context[0].raw.x;
+                                    }
                                     return 'Fecha: ' + context[0].label;
                                 }
                             }
@@ -726,7 +810,7 @@
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
                 
-                // Convert pixel coordinates to data coordinates
+                // Convert pixel coordinates to data coordinates using Chart.js scales
                 const startX = Math.min(selectionStart.x, x);
                 const endX = Math.max(selectionStart.x, x);
                 
@@ -734,21 +818,25 @@
                 const chartArea = chart.chartArea;
                 const xScale = chart.scales.x;
                 
-                // Convert pixel positions to data indices
-                const startIndex = Math.round((startX - chartArea.left) / (chartArea.width / (xScale.max - xScale.min)) + xScale.min);
-                const endIndex = Math.round((endX - chartArea.left) / (chartArea.width / (xScale.max - xScale.min)) + xScale.min);
-                
-                // Get corresponding dates
-                const startDateIndex = Math.max(0, Math.min(filteredData.length - 1, startIndex));
-                const endDateIndex = Math.max(0, Math.min(filteredData.length - 1, endIndex));
-                
-                // Only apply if we have a meaningful selection (at least 2 data points)
-                if (startDateIndex !== endDateIndex && Math.abs(endDateIndex - startDateIndex) > 0) {
-                    const startDate = filteredData[startDateIndex].fecha;
-                    const endDate = filteredData[endDateIndex].fecha;
-                    
+                // Convert pixel positions to actual date values using Chart.js scale methods
+                const startValue = xScale.getValueForPixel(startX);
+                const endValue = xScale.getValueForPixel(endX);
+
+                // Convert timestamps to date strings
+                const startDate = new Date(startValue).toISOString().split('T')[0];
+                const endDate = new Date(endValue).toISOString().split('T')[0];
+
+                // Only apply if we have a meaningful selection (at least 1 day difference)
+                const timeDiff = Math.abs(endValue - startValue);
+                const oneDayMs = 24 * 60 * 60 * 1000;
+
+                if (timeDiff > oneDayMs) {
+                    // Ensure start date is before end date
+                    const actualStartDate = startValue < endValue ? startDate : endDate;
+                    const actualEndDate = startValue < endValue ? endDate : startDate;
+
                     // Automatically apply the selection
-                    applyChartSelection(startDate, endDate);
+                    applyChartSelection(actualStartDate, actualEndDate);
                 }
                 
                 // Reset selection state

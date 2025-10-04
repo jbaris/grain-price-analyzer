@@ -51,7 +51,8 @@ def extract_cereal_prices_by_date(prices_data: Dict, cereals: List[str]) -> Dict
             if cereal in date_data:
                 cereal_data = date_data[cereal]
                 price_str = cereal_data.get('precio', '0.00')
-                
+                if price_str == '0.00':
+                    price_str = cereal_data.get('estimativo', '0.00')
                 # Convert price to float, handling potential string values
                 try:
                     price_ars = float(price_str)

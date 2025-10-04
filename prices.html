@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Precios de Cereales</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .date-range {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .date-range label {
+            font-weight: bold;
+            color: #555;
+        }
+        
+        .date-range input[type="date"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .filter-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .filter-button:hover {
+            background-color: #45a049;
+        }
+        
+        .clear-button {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .clear-button:hover {
+            background-color: #da190b;
+        }
+        
+        .cereal-selector {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .cereal-selector label {
+            font-weight: bold;
+            color: #555;
+        }
+        
+        .cereal-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .cereal-checkbox input[type="checkbox"] {
+            transform: scale(1.2);
+        }
+        
+        .cereal-checkbox label {
+            font-weight: normal;
+            cursor: pointer;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 500px;
+            margin-bottom: 40px;
+            background-color: #fafafa;
+            border-radius: 8px;
+            padding: 20px;
+            cursor: crosshair;
+        }
+        
+        .chart-container.selecting {
+            cursor: grabbing;
+        }
+        
+        .selection-overlay {
+            position: absolute;
+            background-color: rgba(0, 123, 255, 0.1);
+            border-left: 2px solid #007bff;
+            border-right: 2px solid #007bff;
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+        
+        .chart-actions {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .chart-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .chart-button:hover {
+            background-color: #0056b3;
+        }
+        
+        .chart-button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .table-container {
+            overflow-x: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: #4CAF50;
+            color: white;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        tr:hover {
+            background-color: #f0f8ff;
+        }
+        
+        .date-col {
+            min-width: 120px;
+        }
+        
+        .price-col {
+            text-align: right;
+            min-width: 100px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            margin: 0;
+        }
+        
+        .no-data {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌾 Panel de Precios de Cereales</h1>
+        
+        <div class="stats" id="stats">
+            <!-- Stats will be populated by JavaScript -->
+        </div>
+        
+        <div class="controls">
+            <div class="cereal-selector">
+                <label>Seleccionar Cereales:</label>
+                <div class="cereal-checkbox">
+                    <input type="checkbox" id="maiz" checked>
+                    <label for="maiz">Maíz</label>
+                </div>
+                <div class="cereal-checkbox">
+                    <input type="checkbox" id="trigo" checked>
+                    <label for="trigo">Trigo</label>
+                </div>
+                <div class="cereal-checkbox">
+                    <input type="checkbox" id="soja" checked>
+                    <label for="soja">Soja</label>
+                </div>
+            </div>
+            
+            <div class="date-range">
+                <label>Desde:</label>
+                <input type="date" id="startDate">
+                <label>Hasta:</label>
+                <input type="date" id="endDate">
+                <button class="filter-button" onclick="applyDateFilter()">Filtrar</button>
+                <button class="clear-button" onclick="clearDateFilter()">Limpiar</button>
+            </div>
+        </div>
+        
+        
+        <div class="chart-container" id="chartContainer">
+            <canvas id="priceChart"></canvas>
+            <div class="selection-overlay" id="selectionOverlay"></div>
+        </div>
+        
+        <div class="table-container">
+            <table id="priceTable">
+                <thead>
+                    <tr>
+                        <th class="date-col">Fecha</th>
+                        <th class="price-col">Maíz USD</th>
+                        <th class="price-col">Trigo USD</th>
+                        <th class="price-col">Soja USD</th>
+                        <th class="price-col">Tipo de Cambio</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <!-- Table content will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Sample data - in a real implementation, this would be loaded from prices_sanitized.csv
+        const pricesData = [
+            {fecha: "2018-07-02", maiz_ars: 4290.0, trigo_ars: 5990.0, soja_ars: 7990.0, tipo_cambio_usd: 28.3, maiz_usd: 151.59, trigo_usd: 211.66, soja_usd: 282.33},
+            {fecha: "2018-07-03", maiz_ars: 4185.0, trigo_ars: 5920.0, soja_ars: 7740.0, tipo_cambio_usd: 27.8, maiz_usd: 150.54, trigo_usd: 212.95, soja_usd: 278.42},
+            {fecha: "2018-07-04", maiz_ars: 4200.0, trigo_ars: 5850.0, soja_ars: 7730.0, tipo_cambio_usd: 27.8, maiz_usd: 151.08, trigo_usd: 210.43, soja_usd: 278.06},
+            {fecha: "2018-07-05", maiz_ars: 4210.0, trigo_ars: 5900.0, soja_ars: 7800.0, tipo_cambio_usd: 28.05, maiz_usd: 150.09, trigo_usd: 210.34, soja_usd: 278.07},
+            {fecha: "2018-07-06", maiz_ars: 4250.0, trigo_ars: 5820.0, soja_ars: 8010.0, tipo_cambio_usd: 27.9, maiz_usd: 152.33, trigo_usd: 208.6, soja_usd: 287.1},
+            {fecha: "2018-07-10", maiz_ars: 4160.0, trigo_ars: 5800.0, soja_ars: 7780.0, tipo_cambio_usd: 27.37, maiz_usd: 151.99, trigo_usd: 211.91, soja_usd: 284.25},
+            {fecha: "2018-07-11", maiz_ars: 4130.0, trigo_ars: 5800.0, soja_ars: 7720.0, tipo_cambio_usd: 27.39, maiz_usd: 150.78, trigo_usd: 211.76, soja_usd: 281.85},
+            {fecha: "2018-07-12", maiz_ars: 4150.0, trigo_ars: 5720.0, soja_ars: 7700.0, tipo_cambio_usd: 27.23, maiz_usd: 152.41, trigo_usd: 210.06, soja_usd: 282.78},
+            {fecha: "2018-07-13", maiz_ars: 4140.0, trigo_ars: 5700.0, soja_ars: 7610.0, tipo_cambio_usd: 27.21, maiz_usd: 152.15, trigo_usd: 209.48, soja_usd: 279.68},
+            {fecha: "2018-07-16", maiz_ars: 4150.0, trigo_ars: 5650.0, soja_ars: 7710.0, tipo_cambio_usd: 27.36, maiz_usd: 151.68, trigo_usd: 206.51, soja_usd: 281.8}
+        ];
+
+        let chart;
+        let currentData = [...pricesData];
+        let filteredData = [...pricesData];
+        let isSelecting = false;
+        let selectionStart = null;
+
+        // Load CSV data
+        async function loadCSVData() {
+            try {
+                const response = await fetch('./data/prices_sanitized.csv');
+                const csvText = await response.text();
+                const lines = csvText.split('\n');
+                const headers = lines[0].split(',');
+                
+                const data = [];
+                for (let i = 1; i < lines.length; i++) {
+                    if (lines[i].trim()) {
+                        const values = lines[i].split(',');
+                        const row = {};
+                        headers.forEach((header, index) => {
+                            row[header.trim()] = values[index] ? values[index].trim() : '';
+                        });
+                        data.push(row);
+                    }
+                }
+                
+                // Convert string values to numbers where appropriate
+                data.forEach(row => {
+                    row.maiz_usd = parseFloat(row.maiz_usd) || 0;
+                    row.trigo_usd = parseFloat(row.trigo_usd) || 0;
+                    row.soja_usd = parseFloat(row.soja_usd) || 0;
+                    row.tipo_cambio_usd = parseFloat(row.tipo_cambio_usd) || 0;
+                });
+                
+                currentData = data;
+                filteredData = [...data];
+                setDateRange();
+                updateStats();
+                updateChart();
+                updateTable();
+            } catch (error) {
+                console.error('Error loading CSV:', error);
+                // Use sample data if CSV loading fails
+                setDateRange();
+                updateStats();
+                updateChart();
+                updateTable();
+            }
+        }
+
+        // Set date range inputs
+        function setDateRange() {
+            if (currentData.length > 0) {
+                const startDate = currentData[0].fecha;
+                const endDate = currentData[currentData.length - 1].fecha;
+                document.getElementById('startDate').value = startDate;
+                document.getElementById('endDate').value = endDate;
+            }
+        }
+
+        // Apply date filter
+        function applyDateFilter() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            if (startDate && endDate) {
+                filteredData = currentData.filter(row => {
+                    return row.fecha >= startDate && row.fecha <= endDate;
+                });
+            } else {
+                filteredData = [...currentData];
+            }
+            
+            updateStats();
+            updateChart();
+            updateTable();
+        }
+
+        // Clear date filter - reset to initial date range
+        function clearDateFilter() {
+            if (currentData.length > 0) {
+                const startDate = currentData[0].fecha;
+                const endDate = currentData[currentData.length - 1].fecha;
+                document.getElementById('startDate').value = startDate;
+                document.getElementById('endDate').value = endDate;
+            }
+            filteredData = [...currentData];
+            updateStats();
+            updateChart();
+            updateTable();
+        }
+
+
+        // Apply chart selection automatically
+        function applyChartSelection(startDate, endDate) {
+            document.getElementById('startDate').value = startDate;
+            document.getElementById('endDate').value = endDate;
+            
+            filteredData = currentData.filter(row => {
+                return row.fecha >= startDate && row.fecha <= endDate;
+            });
+            
+            updateStats();
+            updateChart();
+            updateTable();
+        }
+
+        // Hide selection overlay
+        function hideSelectionOverlay() {
+            const overlay = document.getElementById('selectionOverlay');
+            overlay.style.display = 'none';
+        }
+
+        // Show selection overlay
+        function showSelectionOverlay(x, y, width, height) {
+            const overlay = document.getElementById('selectionOverlay');
+            const chartContainer = document.getElementById('chartContainer');
+            const canvas = document.getElementById('priceChart');
+            
+            // Get chart area bounds
+            const rect = canvas.getBoundingClientRect();
+            const containerRect = chartContainer.getBoundingClientRect();
+            
+            // Calculate relative positions within the chart container
+            const relativeX = x - 20; // Account for padding
+            const relativeY = 20; // Start from top of chart area
+            const relativeWidth = width;
+            const relativeHeight = 500 - 40; // Full height minus padding
+            
+            overlay.style.left = relativeX + 'px';
+            overlay.style.top = relativeY + 'px';
+            overlay.style.width = relativeWidth + 'px';
+            overlay.style.height = relativeHeight + 'px';
+            overlay.style.display = 'block';
+        }
+
+        // Update statistics
+        function updateStats() {
+            const statsContainer = document.getElementById('stats');
+            const totalRecords = filteredData.length;
+            const dateRange = totalRecords > 0 ? 
+                `${filteredData[0].fecha} a ${filteredData[filteredData.length - 1].fecha}` : 
+                'Sin datos';
+            
+            const avgMaiz = totalRecords > 0 ? 
+                (filteredData.reduce((sum, row) => sum + row.maiz_usd, 0) / totalRecords).toFixed(2) : 0;
+            const avgTrigo = totalRecords > 0 ? 
+                (filteredData.reduce((sum, row) => sum + row.trigo_usd, 0) / totalRecords).toFixed(2) : 0;
+            const avgSoja = totalRecords > 0 ? 
+                (filteredData.reduce((sum, row) => sum + row.soja_usd, 0) / totalRecords).toFixed(2) : 0;
+
+            statsContainer.innerHTML = `
+                <div class="stat-card">
+                    <h3>Registros Totales</h3>
+                    <p class="value">${totalRecords.toLocaleString()}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Promedio Maíz USD</h3>
+                    <p class="value">$${avgMaiz}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Promedio Trigo USD</h3>
+                    <p class="value">$${avgTrigo}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Promedio Soja USD</h3>
+                    <p class="value">$${avgSoja}</p>
+                </div>
+            `;
+        }
+
+        // Update chart
+        function updateChart() {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            
+            if (chart) {
+                chart.destroy();
+            }
+
+            const maizChecked = document.getElementById('maiz').checked;
+            const trigoChecked = document.getElementById('trigo').checked;
+            const sojaChecked = document.getElementById('soja').checked;
+
+            const datasets = [];
+            const colors = {
+                maiz: { border: '#FF6384', background: 'rgba(255, 99, 132, 0.1)' },
+                trigo: { border: '#FFD700', background: 'rgba(255, 215, 0, 0.1)' },
+                soja: { border: '#32CD32', background: 'rgba(50, 205, 50, 0.1)' }
+            };
+
+            if (maizChecked) {
+                datasets.push({
+                    label: 'Maíz USD',
+                    data: filteredData.map(row => ({ x: row.fecha, y: row.maiz_usd })),
+                    borderColor: colors.maiz.border,
+                    backgroundColor: colors.maiz.background,
+                    tension: 0.1,
+                    fill: false
+                });
+            }
+
+            if (trigoChecked) {
+                datasets.push({
+                    label: 'Trigo USD',
+                    data: filteredData.map(row => ({ x: row.fecha, y: row.trigo_usd })),
+                    borderColor: colors.trigo.border,
+                    backgroundColor: colors.trigo.background,
+                    tension: 0.1,
+                    fill: false
+                });
+            }
+
+            if (sojaChecked) {
+                datasets.push({
+                    label: 'Soja USD',
+                    data: filteredData.map(row => ({ x: row.fecha, y: row.soja_usd })),
+                    borderColor: colors.soja.border,
+                    backgroundColor: colors.soja.background,
+                    tension: 0.1,
+                    fill: false
+                });
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { 
+                    labels: filteredData.map(row => row.fecha),
+                    datasets: datasets.map(dataset => ({
+                        ...dataset,
+                        data: dataset.data.map(point => point.y)
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Fecha'
+                            },
+                            ticks: {
+                                maxTicksLimit: 10,
+                                callback: function(value, index, values) {
+                                    // Show every nth label to avoid overcrowding
+                                    const step = Math.ceil(values.length / 10);
+                                    return index % step === 0 ? this.getLabelForValue(value) : '';
+                                }
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Precio (USD)'
+                            },
+                            beginAtZero: false
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Evolución de Precios de Cereales (USD)',
+                            font: {
+                                size: 18
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
+                                },
+                                title: function(context) {
+                                    return 'Fecha: ' + context[0].label;
+                                }
+                            }
+                        },
+                        zoom: {
+                            zoom: {
+                                wheel: {
+                                    enabled: true,
+                                },
+                                pinch: {
+                                    enabled: true
+                                },
+                                mode: 'x',
+                            },
+                            pan: {
+                                enabled: true,
+                                mode: 'x',
+                            }
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    }
+                }
+            });
+        }
+
+        // Update table
+        function updateTable() {
+            const tbody = document.getElementById('tableBody');
+            const maizChecked = document.getElementById('maiz').checked;
+            const trigoChecked = document.getElementById('trigo').checked;
+            const sojaChecked = document.getElementById('soja').checked;
+
+            tbody.innerHTML = '';
+
+            filteredData.forEach(row => {
+                const tr = document.createElement('tr');
+                
+                const fechaCell = document.createElement('td');
+                fechaCell.textContent = row.fecha;
+                fechaCell.className = 'date-col';
+                tr.appendChild(fechaCell);
+
+                const maizCell = document.createElement('td');
+                maizCell.textContent = maizChecked ? '$' + row.maiz_usd.toFixed(2) : '-';
+                maizCell.className = 'price-col';
+                tr.appendChild(maizCell);
+
+                const trigoCell = document.createElement('td');
+                trigoCell.textContent = trigoChecked ? '$' + row.trigo_usd.toFixed(2) : '-';
+                trigoCell.className = 'price-col';
+                tr.appendChild(trigoCell);
+
+                const sojaCell = document.createElement('td');
+                sojaCell.textContent = sojaChecked ? '$' + row.soja_usd.toFixed(2) : '-';
+                sojaCell.className = 'price-col';
+                tr.appendChild(sojaCell);
+
+                const exchangeCell = document.createElement('td');
+                exchangeCell.textContent = row.tipo_cambio_usd.toFixed(2);
+                exchangeCell.className = 'price-col';
+                tr.appendChild(exchangeCell);
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Event listeners
+        document.getElementById('maiz').addEventListener('change', () => {
+            updateChart();
+            updateTable();
+        });
+
+        document.getElementById('trigo').addEventListener('change', () => {
+            updateChart();
+            updateTable();
+        });
+
+        document.getElementById('soja').addEventListener('change', () => {
+            updateChart();
+            updateTable();
+        });
+
+        // Add mouse event handlers for chart selection
+        function addChartSelectionHandlers() {
+            const chartContainer = document.getElementById('chartContainer');
+            const canvas = document.getElementById('priceChart');
+            
+            chartContainer.addEventListener('mousedown', (e) => {
+                // Check if we're clicking on the chart area (not on legend or other elements)
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Only start selection if clicking within chart area
+                if (chart && chart.chartArea) {
+                    const chartArea = chart.chartArea;
+                    if (x >= chartArea.left && x <= chartArea.right && 
+                        y >= chartArea.top && y <= chartArea.bottom) {
+                        
+                        isSelecting = true;
+                        chartContainer.classList.add('selecting');
+                        selectionStart = { x, y };
+                        showSelectionOverlay(x, y, 0, 0);
+                    }
+                }
+            });
+            
+            chartContainer.addEventListener('mousemove', (e) => {
+                if (!isSelecting || !selectionStart) return;
+                
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                
+                const width = x - selectionStart.x;
+                
+                showSelectionOverlay(
+                    Math.min(selectionStart.x, x),
+                    0, // Always start from top
+                    Math.abs(width),
+                    0 // Height will be set to full chart height in showSelectionOverlay
+                );
+            });
+            
+            chartContainer.addEventListener('mouseup', (e) => {
+                if (!isSelecting || !selectionStart) return;
+                
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Convert pixel coordinates to data coordinates
+                const startX = Math.min(selectionStart.x, x);
+                const endX = Math.max(selectionStart.x, x);
+                
+                // Get chart scales
+                const chartArea = chart.chartArea;
+                const xScale = chart.scales.x;
+                
+                // Convert pixel positions to data indices
+                const startIndex = Math.round((startX - chartArea.left) / (chartArea.width / (xScale.max - xScale.min)) + xScale.min);
+                const endIndex = Math.round((endX - chartArea.left) / (chartArea.width / (xScale.max - xScale.min)) + xScale.min);
+                
+                // Get corresponding dates
+                const startDateIndex = Math.max(0, Math.min(filteredData.length - 1, startIndex));
+                const endDateIndex = Math.max(0, Math.min(filteredData.length - 1, endIndex));
+                
+                // Only apply if we have a meaningful selection (at least 2 data points)
+                if (startDateIndex !== endDateIndex && Math.abs(endDateIndex - startDateIndex) > 0) {
+                    const startDate = filteredData[startDateIndex].fecha;
+                    const endDate = filteredData[endDateIndex].fecha;
+                    
+                    // Automatically apply the selection
+                    applyChartSelection(startDate, endDate);
+                }
+                
+                // Reset selection state
+                isSelecting = false;
+                chartContainer.classList.remove('selecting');
+                selectionStart = null;
+                hideSelectionOverlay();
+            });
+            
+            // Cancel selection on escape
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && isSelecting) {
+                    isSelecting = false;
+                    chartContainer.classList.remove('selecting');
+                    hideSelectionOverlay();
+                    selectionStart = null;
+                }
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCSVData();
+            addChartSelectionHandlers();
+        });
+    </script>
+</body>
+</html>

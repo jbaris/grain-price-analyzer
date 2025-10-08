@@ -36,7 +36,7 @@ for i in range((end_date - init_date).days + 1):
         if idx == -1:
             # fallback: write last known value
             if date_str_out not in seen_dates:
-                rows_to_write.append(f"{date_str_out},{last_value}")
+                rows_to_write.append({"date": date_str_out, "value": last_value})
                 seen_dates.add(date_str_out)
             continue
         content = content[idx:]
@@ -47,14 +47,14 @@ for i in range((end_date - init_date).days + 1):
         if not rows:
             # fallback: write last known value
             if date_str_out not in seen_dates:
-                rows_to_write.append(f"{date_str_out},{last_value}")
+                rows_to_write.append({"date": date_str_out, "value": last_value})
                 seen_dates.add(date_str_out)
             continue
         for row in rows[1:]:  # skip header
             cells = row.xpath('./td')
             if len(cells) < 4:
                 continue
-            value_raw = cells[2].text_content().strip().replace('.', '').replace(',', '.')
+            value_raw = cells[2].text_content().strip().replace(',', '.')
             try:
                 value = float(value_raw)
                 formatted_value = f"{value:.1f}"
@@ -68,12 +68,12 @@ for i in range((end_date - init_date).days + 1):
             except Exception:
                 date_str = date_str_out
             if date_str not in seen_dates:
-                rows_to_write.append(f"{date_str},{formatted_value}")
+                rows_to_write.append({"date": date_str, "value": formatted_value})
                 seen_dates.add(date_str)
     except Exception:
         # fallback: write last known value
         if date_str_out not in seen_dates:
-            rows_to_write.append(f"{date_str_out},{last_value}")
+            rows_to_write.append({"date": date_str_out, "value": last_value})
             seen_dates.add(date_str_out)
 
 # Load existing data from dolar_exchange.json into rows_to_write
@@ -82,18 +82,22 @@ for record in data['data']:
     date_str = record[0]
     value = record[1]
     if date_str not in seen_dates:
-        rows_to_write.append(f"{date_str},{value}")
+        rows_to_write.append({"date": date_str, "value": value})
         seen_dates.add(date_str)
 
 # Write to file, override on each run as valid JSON
 print(f"Writing {len(rows_to_write)} records to {output_file}")
 json_rows = []
 for row in rows_to_write:
-    date_part, value_part = row.split(',')
+    date_part = row["date"]
+    value_part = row["value"]
     try:
         value = float(value_part)
     except Exception:
         value = value_part
+    # Truncate the float value to has only two decimals
+    if isinstance(value, float):
+        value = float(f"{value:.2f}")
     json_rows.append([date_part, value])
 
 # Sort the list by date before writing

@@ -10,4 +10,4 @@ curl "https://www.ggsa.com.ar/get_pizarra/pros59/$START/$TODAY/" \
   -H 'Origin: https://www.ggsa.com.ar' \
   -H 'Referer: https://www.ggsa.com.ar/' \
   -H 'X-CSRFToken: L8agw2oRRNP4AEZ7i7scTHGhGZXcbyPLyUXXQnMsdNuRGJJLennnVHbCz0EzQWw7' \
-  --data-raw '{}' -k #> ../data/prices_ggsa.json
+  --data-raw '{}' -k # > ./data/prices_ggsa.json

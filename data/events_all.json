@@ -78,5 +78,13 @@
   "2025-09-01": "Siembra maíz",
   "2025-06-15": "Siembra trigo",
   "2025-12-01": "Cosecha trigo",
-  "2025-05-01": "Cosecha maíz"
+  "2025-05-01": "Cosecha maíz",
+  "2026-15-10": "Siembra soja 1era",
+  "2026-12-15": "Siembra soja 2da",
+  "2026-03-20": "Cosecha soja 1era",
+  "2026-07-20": "Cosecha soja 2da",
+  "2026-09-01": "Siembra maíz",
+  "2026-06-15": "Siembra trigo",
+  "2026-12-01": "Cosecha trigo",
+  "2026-05-01": "Cosecha maíz"
 }

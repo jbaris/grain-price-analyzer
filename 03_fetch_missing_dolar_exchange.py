@@ -1,107 +1,92 @@
-import requests
+#!/usr/bin/env python3
+"""Build a complete daily USD exchange-rate series from BCRA raw text data."""
+
+from __future__ import annotations
+
 import json
-from datetime import datetime, timedelta
-from lxml import html
+from datetime import date, datetime, timedelta
+from pathlib import Path
 
-# Read the json file ./data/dolar_exchange.json
-with open('./data/dolar_exchange.json', 'r') as f:
-    data = json.load(f)
+INPUT_FILE = Path("./data/dolar_bcra.txt")
+OUTPUT_FILE = Path("./data/dolar_exchange_complete.json")
 
-# Fetch the last record of .data
-last_record = data['data'][-1]
-last_date = datetime.strptime(last_record[0], '%Y-%m-%d')
-last_value = last_record[1]
 
-# Set the date range
-init_date = last_date + timedelta(days=1)
-end_date = datetime.now()
+def parse_rate(raw_value: str) -> float:
+    """Parse rates that may use comma decimal separator."""
+    normalized = raw_value.strip()
+    if "," in normalized and "." in normalized:
+        normalized = normalized.replace(".", "")
+    normalized = normalized.replace(",", ".")
+    return float(normalized)
 
-# Prepare output file
-output_file = './data/dolar_exchange_complete.json'
-seen_dates = set()
-rows_to_write = []
 
-for i in range((end_date - init_date).days + 1):
-    print(f"Processing date {i+1} of {(end_date - init_date).days + 1}")
-    current_date = init_date + timedelta(days=i)
-    date_str_url = current_date.strftime('%d/%m/%Y')
-    date_str_out = current_date.strftime('%Y-%m-%d')
-    url = f'https://www.bna.com.ar/Cotizador/HistoricoPrincipales?id=billetes&fecha={date_str_url}&filtroEuro=0&filtroDolar=1'
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        content = resp.text
-        # Skip all until <div id="cotizacionesCercanas">
-        idx = content.find('<div id="cotizacionesCercanas">')
-        if idx == -1:
-            # fallback: write last known value
-            if date_str_out not in seen_dates:
-                rows_to_write.append({"date": date_str_out, "value": last_value})
-                seen_dates.add(date_str_out)
-            continue
-        content = content[idx:]
-        print(f"Fetched data for {date_str_url}: \n {content}")
-        # Parse the HTML
-        tree = html.fromstring(content)
-        rows = tree.xpath('//div[@id="tablaDolar"]/table/tbody/tr')
-        if not rows:
-            # fallback: write last known value
-            if date_str_out not in seen_dates:
-                rows_to_write.append({"date": date_str_out, "value": last_value})
-                seen_dates.add(date_str_out)
-            continue
-        for row in rows[1:]:  # skip header
-            cells = row.xpath('./td')
-            if len(cells) < 4:
+def load_rates_by_date(input_path: Path) -> dict[date, float]:
+    """Load raw file rows as a date->rate map, validating row format."""
+    rates: dict[date, float] = {}
+
+    with input_path.open("r", encoding="utf-8") as file:
+        for line_number, raw_line in enumerate(file, start=1):
+            line = raw_line.strip()
+            if not line:
                 continue
-            value_raw = cells[2].text_content().strip().replace(',', '.')
+
+            parts = line.split("\t")
+            if len(parts) != 2:
+                raise ValueError(
+                    f"Invalid format at line {line_number}: expected '<date>\\t<value>'"
+                )
+
             try:
-                value = float(value_raw)
-                formatted_value = f"{value:.1f}"
-            except Exception:
-                continue
-            date_cell = cells[3].text_content().strip()
-            # Format date as YYYY-MM-DD
-            try:
-                date_obj = datetime.strptime(date_cell, '%d/%m/%Y')
-                date_str = date_obj.strftime('%Y-%m-%d')
-            except Exception:
-                date_str = date_str_out
-            if date_str not in seen_dates:
-                rows_to_write.append({"date": date_str, "value": formatted_value})
-                seen_dates.add(date_str)
-    except Exception:
-        # fallback: write last known value
-        if date_str_out not in seen_dates:
-            rows_to_write.append({"date": date_str_out, "value": last_value})
-            seen_dates.add(date_str_out)
+                parsed_date = datetime.strptime(parts[0].strip(), "%d/%m/%Y").date()
+                parsed_rate = parse_rate(parts[1])
+            except ValueError as exc:
+                raise ValueError(f"Invalid data at line {line_number}: {line}") from exc
 
-# Load existing data from dolar_exchange.json into rows_to_write
-print(f"Loading existing data from ./data/dolar_exchange.json")
-for record in data['data']:
-    date_str = record[0]
-    value = record[1]
-    if date_str not in seen_dates:
-        rows_to_write.append({"date": date_str, "value": value})
-        seen_dates.add(date_str)
+            rates[parsed_date] = parsed_rate
 
-# Write to file, override on each run as valid JSON
-print(f"Writing {len(rows_to_write)} records to {output_file}")
-json_rows = []
-for row in rows_to_write:
-    date_part = row["date"]
-    value_part = row["value"]
-    try:
-        value = float(value_part)
-    except Exception:
-        value = value_part
-    # Truncate the float value to has only two decimals
-    if isinstance(value, float):
-        value = float(f"{value:.2f}")
-    json_rows.append([date_part, value])
+    if not rates:
+        raise ValueError(f"Input file has no valid data: {input_path}")
 
-# Sort the list by date before writing
-json_rows.sort(key=lambda x: x[0])
+    return rates
 
-with open(output_file, 'w') as f:
-    json.dump({"data": json_rows}, f, ensure_ascii=False)
+
+def complete_daily_series(rates_by_date: dict[date, float]) -> list[list[object]]:
+    """Fill missing dates using the latest previous published value."""
+    start_date = min(rates_by_date)
+    end_date = max(rates_by_date)
+
+    output_rows: list[list[object]] = []
+    current_date = start_date
+    last_known_rate: float | None = None
+
+    while current_date <= end_date:
+        if current_date in rates_by_date:
+            last_known_rate = rates_by_date[current_date]
+
+        if last_known_rate is None:
+            raise ValueError(
+                "Cannot complete series before first known exchange-rate value"
+            )
+
+        output_rows.append([current_date.isoformat(), round(last_known_rate, 4)])
+        current_date += timedelta(days=1)
+
+    return output_rows
+
+
+def main() -> None:
+    rates_by_date = load_rates_by_date(INPUT_FILE)
+    complete_rows = complete_daily_series(rates_by_date)
+
+    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with OUTPUT_FILE.open("w", encoding="utf-8") as output_file:
+        json.dump({"data": complete_rows}, output_file, ensure_ascii=False)
+
+    print(
+        f"Generated {len(complete_rows)} daily exchange-rate rows in {OUTPUT_FILE} "
+        f"(from {complete_rows[0][0]} to {complete_rows[-1][0]})."
+    )
+
+
+if __name__ == "__main__":
+    main()
